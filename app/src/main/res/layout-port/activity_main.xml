@@ -5,6 +5,19 @@
 			  android:orientation="vertical"
 			  tools:context=".MainActivity">
 
+
+	<RelativeLayout
+		android:layout_width="match_parent"
+		android:layout_height="0dp"
+		android:layout_weight="1">
+
+		<ImageView
+			android:id="@+id/a_main_image_frame"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"/>
+
+	</RelativeLayout>
+
 	<TableLayout
 		android:layout_width="match_parent"
 		android:layout_height="wrap_content">
@@ -70,10 +83,5 @@
 		</TableRow>
 
 	</TableLayout>
-
-	<FrameLayout
-		android:id="@+id/a_main_frame"
-		android:layout_width="match_parent"
-		android:layout_height="match_parent"/>
 
 </LinearLayout>

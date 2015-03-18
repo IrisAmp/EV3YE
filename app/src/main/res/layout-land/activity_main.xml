@@ -5,9 +5,22 @@
 			  android:layout_height="match_parent"
 			  android:orientation="horizontal">
 
-	<TableLayout
-		android:layout_width="wrap_content"
+	<RelativeLayout
+		android:layout_width="0dp"
 		android:layout_height="match_parent"
+		android:layout_weight="2">
+
+		<ImageView
+			android:id="@+id/a_main_image_frame"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"/>
+
+	</RelativeLayout>
+
+	<TableLayout
+		android:layout_width="0dp"
+		android:layout_height="match_parent"
+		android:layout_weight="1"
 		android:padding="@dimen/margin_less">
 
 		<TableRow>
@@ -87,10 +100,5 @@
 		</TableRow>
 
 	</TableLayout>
-
-	<FrameLayout
-		android:id="@+id/a_main_frame"
-		android:layout_width="match_parent"
-		android:layout_height="match_parent"/>
 
 </LinearLayout>

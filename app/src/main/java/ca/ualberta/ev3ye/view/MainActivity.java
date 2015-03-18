@@ -14,8 +14,11 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Pair;
+import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ImageButton;
@@ -31,6 +34,14 @@ import ca.ualberta.ev3ye.auxiliary.WiFiP2PBroadcastReceiver;
 import ca.ualberta.ev3ye.logic.BluetoothCom;
 
 
+/*
+* NOTE TO SELF:
+* WIFI COMMAND FORMAT:
+* 		;left_right_cam
+* 	EG:
+	* 	;100_100_100
+* */
+
 public class MainActivity
 		extends Activity
 		implements WiFiP2PBroadcastReceiver.WiFiP2PBroadcastCallbacks
@@ -45,6 +56,7 @@ public class MainActivity
 	protected P2PDiscoveryReceiver     p2pDiscoveryReceiver  = null;
 	protected P2PPeerListReceiver      p2pPeerListReceiver   = null;
 	protected P2PConnectionReceiver    p2pConnectionReceiver = null;
+	protected GamePadHandler           gamePad               = null;
 
 	@Override
 	protected void onCreate( Bundle savedInstanceState )
@@ -57,6 +69,40 @@ public class MainActivity
 		viewHolder.init();
 
 		initWiFiP2p();
+
+		checkForJoystick();
+	}
+
+	private void checkForJoystick()
+	{
+		ArrayList< Integer > gameControllerDeviceIds = new ArrayList<>();
+		int[] deviceIds = InputDevice.getDeviceIds();
+		for ( int deviceId : deviceIds )
+		{
+			InputDevice dev = InputDevice.getDevice( deviceId );
+			int sources = dev.getSources();
+
+			// Verify that the device has gamepad buttons, control sticks, or both.
+			if ( ( ( sources & InputDevice.SOURCE_GAMEPAD ) == InputDevice.SOURCE_GAMEPAD ) && ( ( sources & InputDevice.SOURCE_JOYSTICK ) == InputDevice.SOURCE_JOYSTICK ) )
+			{
+				// This device is a game controller. Store its device ID.
+				if ( !gameControllerDeviceIds.contains( deviceId ) )
+				{
+					gameControllerDeviceIds.add( deviceId );
+				}
+			}
+		}
+
+		Log.v( AppState.LOG_TAG,
+			   "[JOYS] > Device has " + gameControllerDeviceIds + " game controllers." );
+
+		if ( gameControllerDeviceIds.size() > 0 )
+		{
+			int deviceId = gameControllerDeviceIds.get( 0 );
+
+			Log.v( AppState.LOG_TAG, "[JOYS] > Using device ID " + deviceId + " as gamepad." );
+			gamePad = new GamePadHandler( deviceId );
+		}
 	}
 
 	@Override
@@ -95,6 +141,34 @@ public class MainActivity
 	{
 		Log.v( AppState.LOG_TAG, "[INFO] > ----- MainActivity onDestroy() -----" );
 		super.onDestroy();
+	}
+
+	@Override
+	public boolean onKeyDown( int keyCode, KeyEvent event )
+	{
+		if ( ( event.getSource() & InputDevice.SOURCE_GAMEPAD ) == InputDevice.SOURCE_GAMEPAD )
+		{
+			gamePad.handleEventAuto( keyCode, event );
+			return true;
+		}
+		else
+		{
+			return super.onKeyDown( keyCode, event );
+		}
+	}
+
+	@Override
+	public boolean onGenericMotionEvent( MotionEvent event )
+	{
+		if ( ( event.getSource() & InputDevice.SOURCE_JOYSTICK ) == InputDevice.SOURCE_JOYSTICK && event.getAction() == MotionEvent.ACTION_MOVE && gamePad != null )
+		{
+			gamePad.handleEventAuto( event );
+			return true;
+		}
+		else
+		{
+			return super.onGenericMotionEvent( event );
+		}
 	}
 
 	@Override
@@ -222,6 +296,9 @@ public class MainActivity
 		public void onSuccess()
 		{
 			Log.v( AppState.LOG_TAG, "[WIFI] > P2P connection accepted!" );
+			// TODO:
+			// http://developer.android.com/guide/topics/connectivity/wifip2p.html
+
 		}
 
 		@Override
@@ -231,18 +308,93 @@ public class MainActivity
 		}
 	}
 
+	protected class GamePadHandler
+	{
+		public volatile GamepadData             latestData      = null;
+		protected       InputDevice             inputDevice     = null;
+		protected       InputDevice.MotionRange lsX_motionRange = null;
+		protected       InputDevice.MotionRange lsY_motionRange = null;
+		protected       InputDevice.MotionRange rsX_motionRange = null;
+		protected       InputDevice.MotionRange rsY_motionRange = null;
+		protected       InputDevice.MotionRange lt_motionRange  = null;
+		protected       InputDevice.MotionRange rt_motionRange  = null;
+
+		public GamePadHandler( int deviceId )
+		{
+			inputDevice = InputDevice.getDevice( deviceId );
+			lsX_motionRange = inputDevice.getMotionRange( MotionEvent.AXIS_X );
+			lsY_motionRange = inputDevice.getMotionRange( MotionEvent.AXIS_Y );
+			rsX_motionRange = inputDevice.getMotionRange( MotionEvent.AXIS_Z );
+			rsY_motionRange = inputDevice.getMotionRange( MotionEvent.AXIS_RZ );
+			lt_motionRange = inputDevice.getMotionRange( MotionEvent.AXIS_LTRIGGER );
+			rt_motionRange = inputDevice.getMotionRange( MotionEvent.AXIS_RTRIGGER );
+
+			if ( lsX_motionRange != null )
+			{
+				Log.v( AppState.LOG_TAG, "[JOYS] > LSX configured." );
+				Log.v( AppState.LOG_TAG,
+					   "Range: [" + lsX_motionRange.getMax() + ", " + lsX_motionRange.getMin() + "]" );
+				Log.v( AppState.LOG_TAG, "Flat:  [" + lsX_motionRange.getFlat() + "]" );
+			}
+			if ( lsY_motionRange != null )
+			{
+				Log.v( AppState.LOG_TAG, "[JOYS] > LSY configured." );
+				Log.v( AppState.LOG_TAG,
+					   "[JOYS] >     Range: [" + lsY_motionRange.getMax() + ", " + lsY_motionRange.getMin() + "]" );
+				Log.v( AppState.LOG_TAG,
+					   "[JOYS] >     Flat:  [" + lsY_motionRange.getFlat() + "]" );
+			}
+		}
+
+		public float getLeftJoystickX( MotionEvent event )
+		{
+			return getAxisValueImpl( event, MotionEvent.AXIS_X, lsX_motionRange.getFlat() );
+		}
+
+		public float getLeftJoystickY( MotionEvent event )
+		{
+			return getAxisValueImpl( event, MotionEvent.AXIS_Y, lsY_motionRange.getFlat() );
+		}
+
+		protected float getAxisValueImpl( MotionEvent event, int axis, float flat )
+		{
+			float result = event.getAxisValue( axis );
+			return ( Math.abs( result ) < flat ) ? 0 : result;
+		}
+
+		public void handleEventAuto( MotionEvent event )
+		{
+
+		}
+
+		public void handleEventAuto( int keyCode, KeyEvent event )
+		{
+
+		}
+
+		public class GamepadData
+		{
+			public float LSX = 0;
+			public float LSY = 0;
+			public float RSX = 0;
+			public float RSY = 0;
+			public float RT  = 0;
+			public float LT  = 0;
+		}
+	}
+
 	protected class ViewHolder
 	{
-		public              ImageButton                         bluetoothAcceptButton  = null;
-		public              ImageButton                         bluetoothRefreshButton = null;
-		public              ImageButton                         wifiP2pAcceptButton    = null;
-		public              ImageButton                         wifiP2pRefreshButton   = null;
-		public              Spinner                             bluetoothSpinner       = null;
-		public              Spinner                             wifiP2pSpinner         = null;
-		public              TwoLineArrayAdapter                 bluetoothArrayAdapter  = null;
-		public              TwoLineArrayAdapter                 wifiP2pArrayAdapter    = null;
-		public              List< Pair< String, String > >      bluetoothDevices       = null;
-		public              ArrayList< Pair< String, String > > wifiP2pDevices         = null;
+		public ImageButton                         bluetoothAcceptButton  = null;
+		public ImageButton                         bluetoothRefreshButton = null;
+		public ImageButton                         wifiP2pAcceptButton    = null;
+		public ImageButton                         wifiP2pRefreshButton   = null;
+		public Spinner                             bluetoothSpinner       = null;
+		public Spinner                             wifiP2pSpinner         = null;
+		public TwoLineArrayAdapter                 bluetoothArrayAdapter  = null;
+		public TwoLineArrayAdapter                 wifiP2pArrayAdapter    = null;
+		public List< Pair< String, String > >      bluetoothDevices       = null;
+		public ArrayList< Pair< String, String > > wifiP2pDevices         = null;
 
 		public ViewHolder()
 		{
@@ -403,3 +555,4 @@ public class MainActivity
 		}
 	}
 }
+
