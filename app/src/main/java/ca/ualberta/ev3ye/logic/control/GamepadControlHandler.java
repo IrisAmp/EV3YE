@@ -33,6 +33,7 @@ public class GamepadControlHandler
 	public GamepadControlHandler( ControlEventCallbacks callbackTarget )
 	{
 		super( callbackTarget );
+
 		int[] deviceIds = InputDevice.getDeviceIds();
 		int controllerID = -1;
 		for ( int deviceId : deviceIds )
@@ -62,7 +63,7 @@ public class GamepadControlHandler
 		{
 			Helper.LogE( "CTRL",
 						 "GamepadControlProvider could not be initialized properly because the device has no available gamepad input." );
-			callbackTarget.onDispatcherSetupFailure( "The device has no available gamepad input." );
+			callbackTarget.onHandlerSetupFailure( "The device has no available gamepad input." );
 		}
 	}
 
@@ -102,11 +103,17 @@ public class GamepadControlHandler
 	}
 
 	@Override
-	public void receiveMotionEvent( MotionEvent event )
+	public void receiveControlEvent( Object event )
 	{
-		latestData.update( event );
+		latestData.update( (MotionEvent) event );
 		String controlMsg = controlScheme.getControlMessage( latestData );
 		callbackTarget.onControlEventResult( controlMsg );
+	}
+
+	@Override
+	public void cleanup()
+	{
+
 	}
 
 	@Override
@@ -183,8 +190,8 @@ public class GamepadControlHandler
 
 			if ( steering != 0 )
 			{
-				motorL = (steering < 0) ? -motorL : motorL;
-				motorR = (steering < 0) ? motorR : -motorR;
+				motorL = ( steering < 0 ) ? -motorL : motorL;
+				motorR = ( steering < 0 ) ? motorR : -motorR;
 			}
 
 			return formatControlMsg( motorL, motorR );
